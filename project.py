@@ -191,19 +191,24 @@ if __name__ == "__main__":
         dest = (row['dropoff_latitude'], row['dropoff_longitude'])
         t = row['tpep_pickup_datetime']
         # make assumption on tcall, tmin, tmax
+        # We assume a wait time can lie between 30 seconds and 10 minutes.
+        actual_wait_time = np.random.uniform(0.5, 6)
         tcall = timedelta(
             hours=int(t[11:13]),
-            minutes=int(t[14:16])-3,
+            minutes=int(t[14:16]) - actual_wait_time,
             seconds=int(t[17:19])
         )
+        # Now that we have a request time, we determine how long the user
+        # would be willing to wait. 
         tmin = timedelta(
             hours=int(t[11:13]),
             minutes=int(t[14:16])-2,
             seconds=int(t[17:19])
         )
+        # We assume a customer would not be willing to wait more than 8 minutes
         tmax = timedelta(
             hours=int(t[11:13]),
-            minutes=int(t[14:16])+2,
+            minutes=int(t[14:16]) - actual_wait_time + 8,
             seconds=int(t[17:19])
         )
         t = row['tpep_dropoff_datetime']
@@ -214,7 +219,7 @@ if __name__ == "__main__":
         )
         pb.add_cust(
             Customer(
-                i+1, orig, dest, tcall, tmin, tmax, float(row['fare_amount']),
+                i+1, orig, dest, tcall, tcall, tmax, float(row['fare_amount']),
                 dropoff
             )
         )
