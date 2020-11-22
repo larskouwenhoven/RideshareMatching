@@ -7,8 +7,17 @@ import argparse
 from process_data import process_data
 
 
+
 max_cust_one_car = 4
 f_name = 'yellow_tripdata_2016-04.csv'
+
+def haversine(lat1, lon1, lat2, lon2):     
+    R = 3958.76 # Earth radius in miles          
+    dLat, dLon, lat1, lat2 = np.radians(lat2 - lat1), np.radians(lon2 - lon1), np.radians(lat1), np.radians(lat2)     
+    
+    a =  np.sin(dLat/2) ** 2 + np.cos(lat1) * np.cos(lat2) * np.sin(dLon/2) ** 2     
+    c = 2 * np.arcsin(np.sqrt(a))          
+    return R * c
 
 
 def distance(cord1, cord2):
@@ -34,6 +43,41 @@ def distance(cord1, cord2):
     c = 2 * atan2(sqrt(a), sqrt(1 - a))
 
     return R * c
+
+
+def manhattan_distance(cord1, cord2):
+    """
+    Computes the Manhattan distance between two coordinates
+    """
+    start = np.stack(np.array([cord1[0], cord1[1]]).reshape(-1,1), axis = 1)
+    end = np.stack(np.array([cord2[0], cord2[1]]).reshape(-1,1), axis = 1)
+
+    theta1 = np.radians(-28.904)
+    theta2 = np.radians(28.904)
+
+    ## Rotation matrix
+    R1 = np.array(
+        [[np.cos(theta1), np.sin(theta1)],
+         [-np.sin(theta1), np.cos(theta1)]]
+    )
+    R2 = np.array(
+        [[np.cos(theta2), np.sin(theta2)],
+         [-np.sin(theta2), np.cos(theta2)]]
+    )
+
+    # Rotate start and dropoff coordinates
+    startT = R1 @ start.T
+    endT = R1 @ end.T
+
+    # Coordinates of Hinge point in the rotated world
+    vT = np.stack((startT[0,:], endT[1,:]))
+    # Coordinates of Hinge point in the real world
+    v = R2 @ vT
+
+    result = (haversine(start.T[0], start.T[1], v[0], v[1]) +
+              haversine(v[0], v[1], end.T[0], end.T[1])
+    )
+    return result 
 
 
 class Customer:
@@ -78,7 +122,7 @@ class Taxi:
         self.pos = c.orig
         self.dropoff = c.dropoff
         c.served = True
-        speed = distance(c.dest, c.orig) / (c.dropoff - c.tmin - timedelta(seconds=120)).seconds
+        speed = manhattan_distance(c.dest, c.orig) / (c.dropoff - c.tmin - timedelta(seconds=120)).seconds
         if speed == 0:
             speed = 0.002
         c.speed = speed
@@ -129,7 +173,7 @@ class TaxiProblem:
             for t in range(num_taxis):
                 self.taxis[t].unload(c.tmax)
                 if self.taxis[t].loadable():
-                    tmp_dist = distance(self.taxis[t].pos, c.orig)
+                    tmp_dist = manhattan_distance(self.taxis[t].pos, c.orig)
                     if self.taxis[t].speed != None:
                         T = tmp_dist / self.taxis[t].speed
                     else:
@@ -156,11 +200,11 @@ class TaxiProblem:
                     for a in range(len(self.taxis[t].custs)-1):
                         c_k_1 = self.taxis[t].custs[a]
                         c_k = self.taxis[t].custs[a+1]
-                        T_c_ck = distance(c.dest, c_k.orig) / c_k.speed
+                        T_c_ck = manhattan_distance(c.dest, c_k.orig) / c_k.speed
                         tmin_cs = max(c.tmin, c_k.tmax - timedelta(seconds=T_c_ck))
-                        T_c_ck1 = distance(c_k_1.dest, c.orig) / c_k_1.speed
+                        T_c_ck1 = manhattan_distance(c_k_1.dest, c.orig) / c_k_1.speed
                         tmax_cs = min(c.tmax, c_k_1.tmin + timedelta(seconds=T_c_ck1))
-                        tmp_dist = distance(c_k_1.dest, c.orig)
+                        tmp_dist = manhattan_distance(c_k_1.dest, c.orig)
                         if tmin_cs <= tmax_cs and tmp_dist < dist and self.taxis[t].loadable():
                             if x:
                                 x = False
@@ -243,7 +287,7 @@ if __name__ == "__main__":
         dest = custs[i].dest
         for j in range(i + 1, len(custs)):
             orig = custs[j].orig
-            pb.add_arc(arc(custs[i], custs[j], distance(dest, orig)))
+            pb.add_arc(arc(custs[i], custs[j], manhattan_distance(dest, orig)))
     
     #pb.greedy_heuristic()
     pb.solve()
